@@ -86,6 +86,95 @@ percent = (df_train.isnull().sum() / df_train.isnull().count() ).sort_values(asc
 missing_data = pd.concat([total, percent], axis=1, keys=['Total', 'Percent'])
 missing_data.head(20)
 
+#### I`m following a tutorial, so I will follow it. But I don't agree with the following
+##deleting missing data variables
+df_train_drop = df_train.drop((missing_data[missing_data['Total'] > 1 ]).index, 1)
+df_train_drop = df_train_drop.drop(df_train_drop.loc[df_train_drop['Electrical'].isnull()].index)
+print(df_train_drop.isnull().sum().max()) #just checking that there's no missing data missing...
 
+#### Outliers
 
+##Standardize data
+saleprice_scaled = StandardScaler().fit_transform(df_train_drop['SalePrice'][:, np.newaxis])
+low_range = saleprice_scaled[saleprice_scaled[:,0].argsort()][:10]
+high_range = saleprice_scaled[saleprice_scaled[:,0].argsort()][-10:]
+print('outer range (low) of the distribution:')
+print(low_range)
+print('outer range (high) of the distribution:')
+print(high_range)
 
+##At the moment we won't consider any of the values as outliers, but the biggest are suspicious.
+## Also keep in mind that the distribution has positive skewness
+
+#### Bivariate analysis
+var = 'GrLivArea'
+data = pd.concat([df_train_drop['SalePrice'], df_train[var]], axis=1)
+data.plot.scatter(x=var, y='SalePrice', ylim=(0,800000))
+
+#Deleting points
+df_train_drop.sort_values(by = 'GrLivArea', ascending = False)[:2]
+df_train_drop = df_train_drop.drop(df_train_drop[df_train_drop['Id'] == 1299].index)
+df_train_drop = df_train_drop.drop(df_train_drop[df_train_drop['Id'] == 524].index)
+ 
+# Bivariate analysis saleprice/TotalBsmtSF
+var = 'TotalBsmtSF'
+data = pd.concat([df_train_drop['SalePrice'], df_train_drop[var]], axis = 1)
+data.plot.scatter(x=var, y='SalePrice', ylim=(0,800000))
+
+# Verify normality
+#histogram and normal probability plot
+sns.distplot(df_train_drop['SalePrice'], fit=norm)
+fig = plt.figure()
+res = stats.probplot(df_train_drop['SalePrice'], plot=plt)
+
+##Not normal, so apply log transformation
+df_train_drop['SalePrice'] = np.log(df_train_drop['SalePrice'])
+
+#transformed histogram and normal probability plot
+sns.distplot(df_train_drop['SalePrice'], fit=norm)
+fig = plt.figure()
+res = stats.problpot(df_train_drop['SalePrice'], plot=plt)
+
+#verify normality in GrLivArea
+sns.distplot(df_train_drop['GrLivArea'], fit=norm)
+fig = plt.figure ()
+res = stats.probplot(df_train_drop['GrLivArea'], plot=plt)
+
+#Looks as it has skewness
+#Apply log transformation
+df_train_drop['GrLivArea'] = np.log(df_train_drop['GrLivArea'])
+
+#transformed histogram and normal probability plot
+sns.distplot(df_train_drop['GrLivArea'])
+fig = plt.figure()
+res = stats.probplot(df_train_drop['GrLivArea'], plot=plt)
+
+#verify normality in TotalBsmtSF
+sns.distplot(df_train_drop['TotalBsmtSF'], fit=norm)
+fig = plt.figure()
+res = stats.probplot(df_train_drop['TotalBsmtSF'], plot=plt)
+
+#Looks as it has skewness
+#There are some values equal to zero that they can't be applyed logaritm
+#Create a new variable, categorical, has or has not basement.
+
+df_train_drop['hasBsmt'] = pd.Series(len(df_train_drop['TotalBsmtSF']), index=df_train_drop.index)
+df_train_drop['hasBsmt'] = 0
+df_train_drop.loc[df_train_drop['TotalBsmtSF']>0, 'hasBsmt'] = 1
+
+#Apply log transformation
+df_train_drop.loc[df_train_drop['hasBsmt']==1, 'TotalBsmtSF'] = np.log(df_train_drop['TotalBsmtSF'])
+
+#verify normality
+sns.distplot(df_train_drop[df_train_drop['hasBsmt']==1]['TotalBsmtSF'], fit=norm)
+fig = plt.figure()
+res = stats.probplot(df_train_drop[df_train_drop['hasBsmt']==1]['TotalBsmtSF'], plot=plt)
+
+#### Look for homoscedasticity
+#scatter plot of SalePrice vs GrLivArea
+plt.scatter(df_train_drop['GrLivArea'], df_train_drop['SalePrice'])
+
+plt.scatter(df_train_drop[df_train_drop['hasBsmt']==1]['TotalBsmtSF'], df_train_drop[df_train_drop['hasBsmt']==1]['SalePrice'])
+
+###Convert categorical variable into dummy
+df_train_drop = pd.get_dummies(df_train_drop)
